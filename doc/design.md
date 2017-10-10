@@ -53,8 +53,8 @@ species from a HAL alignment.
 
 1. Use halLiftover to generate PSLs covering the entire genome or a test region.
 2. Split all PSL into a single set of gapless blocks, each block represented by
-   pairs of query/target tuples of equal length query and target coordinates.
-   The blocks are genomic (positive strand) coordinates:<br>
+   pairs of query/target tuples of equal length.  Strand-specific coordinates for the
+   blocks are used, as this makes the dynamic programming easier:<br>
        `(qname qstrand qstart qend)`<br>
        `(tname tstrand tstart tend)`
 3. Partition blocks into lists of blocks that could possibly contain syntenic blocks.
