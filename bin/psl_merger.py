@@ -75,8 +75,10 @@ def construct_psl(blocks):
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('psl')
+    parser.add_argument('out')
     args = parser.parse_args()
     merged = merge(args.psl)
-    for blocks in merged:
-       psl = construct_psl(blocks)
-       print '\t'.join(psl.toRow())
+    with open(args.out, 'w') as f:
+        for blocks in merged:
+           psl = construct_psl(blocks)
+           f.write('\t'.join(psl.toRow())+'\n')
