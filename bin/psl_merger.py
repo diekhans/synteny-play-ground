@@ -5,8 +5,12 @@ from pycbio.hgdata.psl import PslReader
 from pycbio.hgdata.psl import PslBlock
 from pycbio.hgdata.psl import Psl
 from argparse import ArgumentParser
-from itertools import groupby
+from itertools import groupby,chain
+import time
+import datetime
 
+#import sys
+#sys.setrecursionlimit(10000)
 
 def get_blocks_set(psl_file):
     blocks = []
@@ -22,7 +26,7 @@ def are_syntenic(a, b):
                 a.psl.strand == b.psl.strand
 
 
-def is_not_overlapping_ordered_pair(a, b, threshold=1000):
+def is_not_overlapping_ordered_pair(a, b, threshold=5000):
     return are_syntenic(a, b) and\
              0 <= b.qStart - a.qEnd < threshold and\
               0 <=  b.tStart - a.tEnd < threshold 
@@ -47,35 +51,34 @@ def merge(psl):
     merged = []
     i = 0
     for group in blocks_grouped_by_query:
-        #print 'processing group', i 
         merge_group(group, merged)
         i += 1
     return merged
   
-def get_next(block, query_group):
-    f = filter(lambda x: is_not_overlapping_ordered_pair(block, x), query_group)
-    f = sorted(f, key=lambda x: x.qStart)
-    if len(f) < 2:
-        return f
-    return [f[0]] + filter(lambda x: x.qStart < f[0].qEnd, f[1:])
+def get_next(pos, query_group, max_anchor_distance=5000):
+    f = []
+    for i in range(pos+1, len(query_group)):
+        if is_not_overlapping_ordered_pair(query_group[pos], query_group[i], max_anchor_distance):
+            if not f:
+                f.append(i)
+            elif f and is_not_overlapping_ordered_pair(query_group[f[0]], query_group[i], max_anchor_distance):
+                return f
+            else:
+                f.append(i)
+    return f 
 
-def dfs(start_block, group, path, paths, used) :
-    used.add(start_block)
-    assert start_block not in path , "{} not in {}".format(start_block, path)
-    path.append(start_block)
-    nexts = get_next(start_block, group)
-    print 'start block:', start_block
-    for e in nexts:
-        print e
-    print
-    for e in path:
-        print e
-    print
+def dfs(i, group, path, paths, used) :
+    used.add(group[i])
+    assert i not in path , "{} not in {}".format(i, path)
+    path.append(i)
+    nexts = get_next(i, group)
     assert set(nexts) & set(path) == set()
     if not nexts:
-        paths.append(path)
+        assert not map(lambda x: group[x], path) in paths, "{}".format(group[i].psl.qName)
+        paths.append(map(lambda x: group[x], path))
     for e in nexts:
         dfs(e, group, path, paths, used)
+    path.pop()
 
 def depth_merge(psl):
     blocks = get_blocks_set(psl)
@@ -83,13 +86,101 @@ def depth_merge(psl):
     blocks_grouped_by_query = map(lambda x:list(x[1]), groupby(blocks, key=lambda x:x.psl.qName))
     paths = []
     for group in blocks_grouped_by_query:
+        print 'processing group', group[0].psl.qName
         group = sorted(group, key=lambda x: x.qStart)
         used = set()
-        for block in group:
-            if not block in used:
-                dfs(block, group, [], paths, used) 
+        for i in range(len(group)):
+            if not group[i] in used:
+                dfs(i, group, [], paths, used)
     return paths
 
+def best_routes(merged):
+    selected = []
+    weighted_routes = zip(merged, map(lambda path: sum(map(lambda x: x.qEnd - x.qStart, path)), merged))
+    weighted_routes = sorted(weighted_routes, key=lambda x:x[1], reverse=True)
+    used = set()
+    for route,_ in weighted_routes:
+        if not set(route) & used:
+            selected.append(route)
+            used.update(route)
+    return selected
+
+'''
+dag is a dict that for a given vertex stores all its possible next verties
+hidden is a set of vertices that are already in paths
+'''
+def weigh_dag(group, dag, hidden,  max_anchor_distance):
+    #weight of the edge equals length 
+    #of the next block
+    #weight of a vertice equals 
+    #estimated weight: w_j < w_i + w_e(ij) =>
+    #updated w_j
+    #also remember how we came here: 
+    #(prev_vertex, weight)
+    weighted_dag = {}
+    for i in range(len(group)):
+        if i in hidden:
+            continue
+        #print i, group[i], len(group)
+        if not i in dag:
+            nexts = get_next(i, group, max_anchor_distance)
+            dag[i] = nexts
+        else:
+            nexts = dag[i]
+        #if never visited this vertex then 
+        #weight of it equals to its size
+        #because otherwise we will never count its size
+        if not i in weighted_dag:
+            weighted_dag[i] = (-1, group[i].size)
+        for j in nexts:
+            if j in hidden:
+                continue
+            alternative_weight = weighted_dag[i][1] + group[j].size
+            if not j in weighted_dag or weighted_dag[j][1] < alternative_weight: 
+                #w_i + weight of the next edge 
+                weighted_dag[j] = (i, alternative_weight)
+    return weighted_dag
+
+def traceback(weighted_dag, hidden, group):
+    #get the heaviest path weight
+    start_vertex = max(weighted_dag.items(), key=lambda x:x[1][1])[0]
+    path = [start_vertex]
+    prev_vertex = weighted_dag[start_vertex][0]
+    while prev_vertex != -1:
+        path.append(prev_vertex)
+        prev_vertex = weighted_dag[prev_vertex][0]
+    hidden.update(set(path))
+    return map(lambda x: group[x], path)[::-1]
+
+def dag_merge(psl, min_block_breath, max_anchor_distance):
+    blocks = get_blocks_set(psl)
+    blocks = sorted(blocks, key=lambda x: x.psl.qName)
+    blocks_grouped_by_query = map(lambda x:list(x[1]), groupby(blocks, key=lambda x:x.psl.qName))
+    paths = []
+    for group in blocks_grouped_by_query:
+        dag = {}
+        #set of hidden vertices
+        hidden = set()
+        #print 'processing group', group[0].psl.qName
+        group = sorted(group, key=lambda x: x.qStart)
+        while len(group) != len(hidden):
+            ts = time.time()
+            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+            #print st, len(group), len(hidden)
+            weighted_dag = weigh_dag(group, dag, hidden, max_anchor_distance)
+            path = traceback(weighted_dag, hidden, group)
+            if not path:
+                break
+            qLen = path[-1].qEnd - path[0].qStart
+            tLen = path[-1].tEnd - path[0].tStart
+            if qLen >= min_block_breath and tLen >= min_block_breath:
+                paths.append(path)
+            #think if we should keep path that is not complies with lengths bounds
+            #we could traverse these vertices later in other paths
+            #for e in path:
+            #    group.remove(e)
+    return paths
+            
 def construct_psl(blocks):
     psl = Psl()
     psl.match = sum(map(lambda x: x.qEnd-x.qStart, blocks))
@@ -121,15 +212,33 @@ def construct_psl(blocks):
     
 if __name__ == '__main__':
     parser = ArgumentParser()
+    parser.add_argument('alg', help='type of algorithm: simple/recursion/dag')
+    parser.add_argument('min_block_size', nargs='?', help='default is 5K')
+    parser.add_argument('max_anchor_distance', nargs='?', help='default is 5K')
     parser.add_argument('psl')
     parser.add_argument('out')
     args = parser.parse_args()
-    merged = depth_merge(args.psl)
-    #for path in merged:
-    #    for m in path:
-    #        print m,
-    #    print 
-    #merged = merge(args.psl)
+    if args.alg == 'simple':
+        merged = merge(args.psl)
+    elif args.alg == 'recursion':
+        print 'performing dfs...'
+        merged = depth_merge(args.psl)
+        print 'extracting best routes...'
+        merged = best_routes(merged) 
+    elif args.alg == 'dag':
+        print 'dag merge...'
+        min_block_size = 5000
+        max_anchor_distance = 5000
+        if not args.min_block_size:
+            print 'using default min_block_size'
+        else :
+            min_block_size = int(args.min_block_size)
+        if not args.max_anchor_distance:
+            print 'using default max_anchor_distance'
+        else :
+            max_anchor_distance = int(args.max_anchor_distance)
+        merged = dag_merge(args.psl, min_block_size, max_anchor_distance)
+    print 'storing output...'
     with open(args.out, 'w') as f:
         for blocks in merged:
            psl = construct_psl(blocks)
