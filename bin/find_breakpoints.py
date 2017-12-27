@@ -12,7 +12,7 @@ from Bio import SeqIO
 def extract_blocks(psl_file):
     entries = []
     for psl in PslReader(psl_file):
-        entry = (psl.qName, int(psl.qStart), int(psl.qEnd), psl.tName, int(psl.tStart), int(psl.tEnd))
+        entry = (psl.qName, int(psl.qStart), int(psl.qEnd), psl.tName, int(psl.tStart), int(psl.tEnd), psl.strand)
         entries.append(entry)
     return entries
 
@@ -64,10 +64,17 @@ def group_overlapping(sorted_blocks_target):
             accumulated = [b]
     return res
 
-def check_pure_target_deletion(prev_block, b):
+def check_target_insertion(prev_block, b):
     if prev_block[0] != b[0]:
         return False
-    return b[4] - prev_block[5] > 1000
+    ins_target = b[4] - prev_block[5] > 1000
+    #theoretically it can hide the transposition in query, but we rely
+    #on the idea that in case of transposition we will see longer insertions in query
+    #because this fragile segment is not under selection
+    consequent_query = max(b[1] - prev_block[2], prev_block[1] - b[2]) < 100
+    same_strand = b[6] == prev_block[6]
+
+    return ins_target and consequent_query and same_strand
 
 def check_abundance_Ns_genome(fasta, seqid, start, end):
     return float(fasta[seqid][start:end].seq.count('N'))/(end-start)
@@ -113,9 +120,9 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
             b = repeat_blocks[0]
             if prev_block and not scaffold_end_start(prev_block[2], query[prev_block[0]][1],\
                         b[1], query[b[0]][0]):
-                            deletion = check_pure_target_deletion(prev_block, b)
+                            insertion = check_target_insertion(prev_block, b)
                             ns = check_abundance_Ns_for_both(fasta_query, fasta_target, prev_block, b)
-                            breaks.append((prev_block, b, deletion, ns[0], ns[1]))
+                            breaks.append((prev_block, b, insertion, ns[0], ns[1]))
             prev_block = b
     return breaks
 
@@ -133,6 +140,6 @@ if __name__ == '__main__':
     fasta_query = SeqIO.to_dict(SeqIO.parse(open(args.fasta_query),'fasta'))
     breaks = find_breaks(blocks, query_chroms, fasta_target, fasta_query)
     for b in breaks:
-        #tName, tStart, tEnd, ifDeletionInQuery, qNsrate, tNsrate
-        print '\t'.join(map(str,[b[0][3], b[0][5], b[1][4], b[2], b[3], b[4]]))
+        #tName, tStart, tEnd, qNameEnd, qStart, qNameStart, qEnd, ifDeletionInQuery, qNsrate, tNsrate
+        print '\t'.join(map(str,[b[0][3], b[0][5], b[1][4], b[0][0], b[0][2], b[1][0], b[1][1], b[2], b[3], b[4]]))
 
