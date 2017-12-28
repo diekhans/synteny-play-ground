@@ -56,6 +56,23 @@ def load_breakpoints(data_prefix, chrom, groups, outgroups, suffix):
         load_genome_breakpoints(path, genome, backwards)
     return backwards
 
+#b1.start <= b2.start
+def if_overlaps(b1, b2):
+    #if b1.end == b2.start:
+    #    return False
+    return b1.end >= b2.start
+
+def cluster_by_overlap(points):
+    clusters = []
+    cur = [points[0]]
+    for p in points[1:]:
+        if if_overlaps(cur[-1],p):
+            cur.append(p)
+        else:
+            clusters.append(list(cur))
+            cur = [p]
+    return clusters         
+
 def cluster_lin(points, threshold=1000):
     clusters = []
     cur = [points[0]]
@@ -67,14 +84,15 @@ def cluster_lin(points, threshold=1000):
             cur = [p]
     return clusters         
 
-def run(group_genomes, outgroup_genomes, suffix, transloc):
+def run(group_genomes, outgroup_genomes, suffix, transloc, clustering_type):
     for chrom in range(0,20):
     #for chrom in range(0,1):
         #first load all the genomes
         backwards= load_breakpoints(data_prefix, chrom, group_genomes, outgroup_genomes, suffix)
         if not backwards.keys():
             continue
-        r = cluster_lin(sorted(backwards.keys(), key=lambda x:x.middle))
+        r = cluster_lin(sorted(backwards.keys(), key=lambda x:x.middle)) if clustering_type=='middle' \
+            else cluster_by_overlap(sorted(backwards.keys(), key=lambda x:x.start)) 
         r = sorted(r, key=lambda x: len(x))
         #print 'number of points', len(backwards.keys())
         #print 'number of clusters', len(r)
@@ -105,10 +123,11 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--suffix', choices=['prefilterNs'])
     parser.add_argument('--transloc', default=False, action='store_true',help='report only translocs in query?')
+    parser.add_argument('--clustering_type', default='middle', choices=['middle', 'ovl']) 
     parser.add_argument('group',nargs='+',help='list of common names \
                 for the group of species to analyze')
     args = parser.parse_args()
     sorted_names = zip(common_names, latin_names)
     group_genomes = filter(lambda x: x[0] in args.group, sorted_names)
     outgroup_genomes = filter(lambda x: x[0] not in args.group, sorted_names)
-    run(group_genomes, outgroup_genomes, args.suffix, args.transloc) 
+    run(group_genomes, outgroup_genomes, args.suffix, args.transloc, args.clustering_type) 

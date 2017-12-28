@@ -115,7 +115,7 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
         #group repeats in target together
         for repeat_blocks in group_overlapping(sorted_blocks_target): 
             if len(repeat_blocks) > 1:
-                prev_block = sorted(repeat_blocks, key=lambda x: x[5])[-1]
+               #prev_block = sorted(repeat_blocks, key=lambda x: x[5])[-1]
                 continue
             b = repeat_blocks[0]
             if prev_block and not scaffold_end_start(prev_block[2], query[prev_block[0]][1],\
