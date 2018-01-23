@@ -112,7 +112,7 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
                         b.qStart, query[b.qName][0]):
                             ns = check_abundance_Ns_for_both(fasta_query, fasta_target, prev_block, b)
                             breaks.append((prev_block, b, ns[0], ns[1]))
-                            print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
+                            #print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
             prev_block = b
     #exit()
     return breaks
