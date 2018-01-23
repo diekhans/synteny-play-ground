@@ -104,15 +104,15 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
         prev_block = ''
         #group repeats in target together
         for repeat_blocks in group_overlapping(sorted_blocks_target): 
-            #if len(repeat_blocks) > 1:
+            if len(repeat_blocks) > 1:
                #prev_block = sorted(repeat_blocks, key=lambda x: x[5])[-1]
-            #    continue
+                continue
             b = repeat_blocks[0]
             if prev_block and not scaffold_end_start(prev_block.qEnd, query[prev_block.qName][1],\
                         b.qStart, query[b.qName][0]):
                             ns = check_abundance_Ns_for_both(fasta_query, fasta_target, prev_block, b)
                             breaks.append((prev_block, b, ns[0], ns[1]))
-                            #print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
+                           # print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
             prev_block = b
     #exit()
     return breaks
