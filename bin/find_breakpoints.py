@@ -114,7 +114,7 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
                             breaks.append((prev_block, b, ns[0], ns[1]))
                             print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
             prev_block = b
-    exit()
+    #exit()
     return breaks
 
 if __name__ == '__main__':
