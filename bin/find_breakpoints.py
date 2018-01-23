@@ -33,15 +33,19 @@ def parse_bed(bed):
     return d
 
 #check if previous scaffold ended and we came to the beginning of the new one
-#TOTHINK: and or or - in case we put AND we got some cases when one scaffold is ending
-#and the other contniues alignment to target not from the beginning
-#this case must reflect the translocation but it's hardly to say exactly where
-#this first part of the scaffold was aligned
-#in case of OR we may skip some insertions
-def scaffold_end_start(prev_end, prev_global_size, this_start, this_global_start):
+def scaffold_end_start(prev_block, prev_global_size, this_block, this_global_size):
     threshold = 1000 
-    return prev_end >= prev_global_size - threshold \
-        or this_start <= this_global_start + threshold
+    if prev_block.strand == '++':
+        prev_end = prev_global_size - prev_block.qEnd
+    else:
+        prev_end = prev_block.qStart
+
+    if this_block.strand == '++':
+        this_start = this_block.qStart
+    else:
+        this_start = this_global_size - this_block.qEnd
+    #print prev_block.qName, prev_block.strand, prev_end, this_block.qName, this_block.strand, this_start
+    return prev_end < threshold or this_start < threshold
 
 def overlaps(b, accumulated):
     for a in accumulated:
@@ -79,15 +83,23 @@ def check_abundance_Ns_for_both(query, target, prev_block, b):
     seqid = prev_block.tName
     target_ns_1 = check_abundance_Ns_genome(target, seqid, break_start, break_end)
     break_start = b.tStart - 500
-    break_end = b.tEnd + 500
+    break_end = b.tStart + 500
     target_ns_2 = check_abundance_Ns_genome(target, seqid, break_start, break_end)
     target_ns = max(abs(target_ns_1), abs(target_ns_2))
-    break_start = prev_block.qEnd - 500
-    break_end = prev_block.qStart + 500
+    if prev_block.strand == '++':
+        break_start = prev_block.qEnd - 500
+        break_end = prev_block.qEnd + 500
+    else:
+        break_start = prev_block.qStart - 500
+        brak_end = prev_block.qStart + 500
     seqid = prev_block.qName
     query_ns_1 = check_abundance_Ns_genome(query, seqid, break_start, break_end)
-    break_start = b.qStart - 500
-    break_end = b.qStart + 500
+    if prev_block.strand == '++':
+        break_start = b.qStart - 500
+        break_end = b.qStart + 500
+    else:
+        break_start = b.qEnd - 500
+        break_end = b.qEnd + 500
     seqid = b.qName #in case of translocation
     query_ns_2 = check_abundance_Ns_genome(query, seqid, break_start, break_end)
     query_ns = max(abs(query_ns_1), abs(query_ns_2))
@@ -108,8 +120,8 @@ def find_breaks(blocks, query, fasta_target, fasta_query):
                #prev_block = sorted(repeat_blocks, key=lambda x: x[5])[-1]
                 continue
             b = repeat_blocks[0]
-            if prev_block and not scaffold_end_start(prev_block.qEnd, query[prev_block.qName][1],\
-                        b.qStart, query[b.qName][0]):
+            if prev_block and not scaffold_end_start(prev_block, query[prev_block.qName][1],\
+                        b, query[b.qName][1]):
                             ns = check_abundance_Ns_for_both(fasta_query, fasta_target, prev_block, b)
                             breaks.append((prev_block, b, ns[0], ns[1]))
                            # print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
@@ -132,5 +144,13 @@ if __name__ == '__main__':
     breaks = find_breaks(blocks, query_chroms, fasta_target, fasta_query)
     for b in breaks:
         #tName, tStart, tEnd, qNameEnd, qStart, qNameStart, qEnd, ifDeletionInQuery, qNsrate, tNsrate
-        print '\t'.join(map(str,[b[0][3], b[0][5], b[1][4], b[0][0], b[0][2], b[1][0], b[1][1], b[2], b[3]]))
+        if b[0].strand == '++':
+            qEnd = b[0].qEnd
+        else:
+            qEnd = b[1].qStart
+        if b[1].strand == '++':
+            qStart = b[1].qStart
+        else:
+            qStart = b[1].qEnd
+        print '\t'.join(map(str,[b[0].tName, b[0].tEnd, b[1].tStart, b[0].qName, qEnd, b[1].qName, qStart, b[2], b[3]]))
 
