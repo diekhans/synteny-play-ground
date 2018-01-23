@@ -12,8 +12,9 @@ from Bio import SeqIO
 def extract_blocks(psl_file):
     entries = []
     for psl in PslReader(psl_file):
-        entry = (psl.qName, int(psl.qStart), int(psl.qEnd), psl.tName, int(psl.tStart), int(psl.tEnd), psl.strand)
-        entries.append(entry)
+        #entry = (psl.qName, int(psl.qStart), int(psl.qEnd), psl.tName, int(psl.tStart), int(psl.tEnd), psl.strand)
+        #entries.append(entry)
+        entries.append(psl)
     return entries
 
 def print_out(blocks, filename):
@@ -38,18 +39,18 @@ def parse_bed(bed):
 #this first part of the scaffold was aligned
 #in case of OR we may skip some insertions
 def scaffold_end_start(prev_end, prev_global_size, this_start, this_global_start):
-    threshold = 100 
+    threshold = 1000 
     return prev_end >= prev_global_size - threshold \
         or this_start <= this_global_start + threshold
 
 def overlaps(b, accumulated):
     for a in accumulated:
-        if b[4] == a[5] or a[4] == b[5]:
+        if b.tStart == a.tEnd or a.tStart == b.tEnd:
             continue
-        if b[4] <= a[4] <= b[5] or \
-            a[4] <= b[4] <= a[5] or \
-             a[4] <= b[4] <= b[5] <= a[5] or \
-              b[4] <= a[4] <= a[5] <= b[5]:
+        if b.tStart <= a.tStart <= b.tEnd or \
+            a.tStart <= b.tStart <= a.tEnd or \
+             a.tStart <= b.tStart <= b.tEnd <= a.tEnd or \
+              b.tStart <= a.tStart <= a.tEnd <= b.tEnd:
             return True
     return False
 
@@ -64,17 +65,6 @@ def group_overlapping(sorted_blocks_target):
             accumulated = [b]
     return res
 
-def check_target_insertion(prev_block, b):
-    if prev_block[0] != b[0]:
-        return False
-    ins_target = b[4] - prev_block[5] > 1000
-    #theoretically it can hide the transposition in query, but we rely
-    #on the idea that in case of transposition we will see longer insertions in query
-    #because this fragile segment is not under selection
-    consequent_query = max(b[1] - prev_block[2], prev_block[1] - b[2]) < 100
-    same_strand = b[6] == prev_block[6]
-
-    return ins_target and consequent_query and same_strand
 
 def check_abundance_Ns_genome(fasta, seqid, start, end):
     return float(fasta[seqid][start:end].seq.count('N'))/(end-start)
@@ -84,21 +74,21 @@ def check_abundance_Ns_genome(fasta, seqid, start, end):
 #and it finally causes a mess if end - start + 1 == 0 because they overlap for 1bp
 # -> it's a mess
 def check_abundance_Ns_for_both(query, target, prev_block, b):
-    break_start = prev_block[5] - 500
-    break_end = prev_block[5] + 500
-    seqid = prev_block[3]
+    break_start = prev_block.tEnd - 500
+    break_end = prev_block.tEnd + 500
+    seqid = prev_block.tName
     target_ns_1 = check_abundance_Ns_genome(target, seqid, break_start, break_end)
-    break_start = b[4] - 500
-    break_end = b[4] + 500
+    break_start = b.tStart - 500
+    break_end = b.tEnd + 500
     target_ns_2 = check_abundance_Ns_genome(target, seqid, break_start, break_end)
     target_ns = max(abs(target_ns_1), abs(target_ns_2))
-    break_start = prev_block[2] - 500
-    break_end = prev_block[2] + 500
-    seqid = prev_block[0]
+    break_start = prev_block.qEnd - 500
+    break_end = prev_block.qStart + 500
+    seqid = prev_block.qName
     query_ns_1 = check_abundance_Ns_genome(query, seqid, break_start, break_end)
-    break_start = b[1] - 500
-    break_end = b[1] + 500
-    seqid = b[0] #in case of translocation
+    break_start = b.qStart - 500
+    break_end = b.qStart + 500
+    seqid = b.qName #in case of translocation
     query_ns_2 = check_abundance_Ns_genome(query, seqid, break_start, break_end)
     query_ns = max(abs(query_ns_1), abs(query_ns_2))
     return (query_ns, target_ns)
@@ -106,24 +96,25 @@ def check_abundance_Ns_for_both(query, target, prev_block, b):
 def find_breaks(blocks, query, fasta_target, fasta_query):
     breaks = []
     #first group by target sequence id
-    blocks = sorted(blocks, key=lambda x:x[3])
-    for target, blocks_target in groupby(blocks, key=lambda x:x[3]) :
+    blocks = sorted(blocks, key=lambda x:x.tName)
+    for target, blocks_target in groupby(blocks, key=lambda x:x.tName) :
         blocks_target = list(blocks_target)
         #sort by target start
-        sorted_blocks_target = sorted(blocks_target, key=lambda x: x[4])
+        sorted_blocks_target = sorted(blocks_target, key=lambda x: x.tStart)
         prev_block = ''
         #group repeats in target together
         for repeat_blocks in group_overlapping(sorted_blocks_target): 
-            if len(repeat_blocks) > 1:
+            #if len(repeat_blocks) > 1:
                #prev_block = sorted(repeat_blocks, key=lambda x: x[5])[-1]
-                continue
+            #    continue
             b = repeat_blocks[0]
-            if prev_block and not scaffold_end_start(prev_block[2], query[prev_block[0]][1],\
-                        b[1], query[b[0]][0]):
-                            insertion = check_target_insertion(prev_block, b)
+            if prev_block and not scaffold_end_start(prev_block.qEnd, query[prev_block.qName][1],\
+                        b.qStart, query[b.qName][0]):
                             ns = check_abundance_Ns_for_both(fasta_query, fasta_target, prev_block, b)
-                            breaks.append((prev_block, b, insertion, ns[0], ns[1]))
+                            breaks.append((prev_block, b, ns[0], ns[1]))
+                            print prev_block.qName, prev_block.qEnd, query[prev_block.qName][1], b.qName, b.qStart, query[b.qName][0]
             prev_block = b
+    exit()
     return breaks
 
 if __name__ == '__main__':
@@ -141,5 +132,5 @@ if __name__ == '__main__':
     breaks = find_breaks(blocks, query_chroms, fasta_target, fasta_query)
     for b in breaks:
         #tName, tStart, tEnd, qNameEnd, qStart, qNameStart, qEnd, ifDeletionInQuery, qNsrate, tNsrate
-        print '\t'.join(map(str,[b[0][3], b[0][5], b[1][4], b[0][0], b[0][2], b[1][0], b[1][1], b[2], b[3], b[4]]))
+        print '\t'.join(map(str,[b[0][3], b[0][5], b[1][4], b[0][0], b[0][2], b[1][0], b[1][1], b[2], b[3]]))
 
