@@ -2,6 +2,8 @@
 
 import os
 import sys
+from argparse import ArgumentParser
+
 from cluster_utils import run_joblist
 
 prefix='/hive/groups/recon/projs/felidae_comp/synteny-play-ground'
@@ -19,7 +21,7 @@ def make_joblist(specie, common_name, max_jobs=4):
                 os.makedirs(folder)
             data = os.path.join(folder,specie+'.FelisCatus.'+c+'.psl')
             #output = data.split('psl')[0] + 'merged.psl' 
-            folder=os.path.join(prefix,'data/felidae2/',common_name)
+            folder=os.path.join(prefix,'data/felidae/',common_name)
             if not os.path.isdir(folder):
                 os.makedirs(folder)
             output = os.path.join(folder,specie+'.FelisCatus.'+c+'.merged.psl')
@@ -28,9 +30,11 @@ def make_joblist(specie, common_name, max_jobs=4):
     return joblist
    
 if __name__ == '__main__' :
-    specie = sys.argv[1]
-    common_name = sys.argv[2]
-    joblist = make_joblist(specie, common_name)
+    parser = ArgumentParser()
+    parser.add_argument('specie', help='name in cactus file, example: AcinonyxJubatus')
+    parser.add_argument('common_name', help='name for use, example: cheetah')
+    args = parser.parse_args()
+    joblist = make_joblist(args.specie, args.common_name)
     #print joblist
     run_joblist(joblist, 4)
 
