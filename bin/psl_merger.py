@@ -9,9 +9,6 @@ from itertools import groupby,chain
 import time
 import datetime
 
-#import sys
-#sys.setrecursionlimit(10000)
-
 def get_blocks_set(psl_file):
     blocks = []
     for psl in PslReader(psl_file):
