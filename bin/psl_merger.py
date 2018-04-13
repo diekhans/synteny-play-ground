@@ -210,8 +210,8 @@ def construct_psl(blocks):
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('alg', help='type of algorithm: simple/recursion/dag')
-    parser.add_argument('min_block_size', nargs='?', help='default is 5K')
-    parser.add_argument('max_anchor_distance', nargs='?', help='default is 5K')
+    parser.add_argument('min_block_size', nargs='?', default=5000, type=int)
+    parser.add_argument('max_anchor_distance', nargs='?', default=5000, type=int)
     parser.add_argument('psl')
     parser.add_argument('out')
     args = parser.parse_args()
@@ -224,17 +224,9 @@ if __name__ == '__main__':
         merged = best_routes(merged) 
     elif args.alg == 'dag':
         print 'dag merge...'
-        min_block_size = 5000
-        max_anchor_distance = 5000
-        if not args.min_block_size:
-            print 'using default min_block_size'
-        else :
-            min_block_size = int(args.min_block_size)
-        if not args.max_anchor_distance:
-            print 'using default max_anchor_distance'
-        else :
-            max_anchor_distance = int(args.max_anchor_distance)
-        merged = dag_merge(args.psl, min_block_size, max_anchor_distance)
+        print 'using min_block_size = ', args.min_block_size, \
+            'max_anchor_distance =', args.max_anchor_distance 
+        merged = dag_merge(args.psl, args.min_block_size, args.max_anchor_distance)
     print 'storing output...'
     with open(args.out, 'w') as f:
         for blocks in merged:

@@ -18,10 +18,11 @@ def make_joblist(specie, common_name, max_jobs=4):
             script = os.path.join(prefix,'bin/psl_merger_wrapper.sh')
             folder=os.path.join(prefix,'data/felidae/',common_name)
             if not os.path.isdir(folder):
-                os.makedirs(folder)
+                #os.makedirs(folder)
+                raise Exception('No input data folder', folder)
             data = os.path.join(folder,specie+'.FelisCatus.'+c+'.psl')
             #output = data.split('psl')[0] + 'merged.psl' 
-            folder=os.path.join(prefix,'data/felidae/',common_name)
+            folder=os.path.join(prefix,'data/human/',common_name)
             if not os.path.isdir(folder):
                 os.makedirs(folder)
             output = os.path.join(folder,specie+'.FelisCatus.'+c+'.merged.psl')
